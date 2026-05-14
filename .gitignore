@@ -1,0 +1,23 @@
+# ROS Catkin Workspace GitIgnore
+# Ignore build artifacts and temporary files
+
+# Build directories
+build/
+devel/
+
+# Log files
+*.log
+*.tmp
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!--
+  body_pose_only.launch - 单独启动体感识别节点 (调试用)
+-->
+<launch>
+  <arg name="camera_index" default="0"/>
+  <arg name="show_debug" default="true"/>
+
+  <node pkg="handcontrol" type="body_pose_estimation.py" name="body_pose_estimation" output="screen">
+    <param name="camera_index" value="$(arg camera_index)"/>
+    <param name="show_debug" value="$(arg show_debug)"/>
+    <param name="publish_rate" value="30"/>
+  </node>
+</launch>

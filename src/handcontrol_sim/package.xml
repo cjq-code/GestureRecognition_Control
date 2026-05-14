@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>handcontrol_sim</name>
+  <version>1.0.0</version>
+  <description>Simple diff drive robot simulation</description>
+  <maintainer email="user@example.com">user</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>urdf</depend>
+  <depend>xacro</depend>
+  <depend>gazebo_ros</depend>
+  <depend>gazebo_ros_control</depend>
+  <depend>robot_state_publisher</depend>
+</package>

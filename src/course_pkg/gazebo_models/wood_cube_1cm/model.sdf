@@ -1,0 +1,49 @@
+<?xml version="1.0" ?>
+<sdf version="1.5">
+  <model name="wood_cube_1cm">
+    <link name="link">
+      <pose>0 0 0.005 0 0 0</pose>
+      <inertial>
+        <mass>0.0002</mass>
+        <inertia>
+          <ixx>3.333333333333333e-11</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>3.333333333333333e-11</iyy>
+          <iyz>0</iyz>
+          <izz>3.333333333333333e-11</izz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry>
+          <box>
+            <size>0.01 0.01 0.01</size>
+          </box>
+        </geometry>
+        <surface>
+          <contact>
+            <ode>
+              <kp>100000</kp>
+              <kd>1</kd>
+              <max_vel>1.0</max_vel>
+              <min_depth>0.0005</min_depth>
+            </ode>
+          </contact>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <box>
+            <size>0.01 0.01 0.01</size>
+          </box>
+        </geometry>
+        <material>
+          <script>
+            <uri>file://media/materials/scripts/gazebo.material</uri>
+            <name>Gazebo/Wood</name>
+          </script>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

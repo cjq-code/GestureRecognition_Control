@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!--
+  teleop_only.launch - 单独启动控制映射节点 (调试用)
+  
+  用法: 当你已有 /body_pose 发布，只想测试控制映射时使用
+-->
+<launch>
+  <arg name="max_linear_speed" default="0.5"/>
+  <arg name="max_angular_speed" default="2.0"/>
+
+  <node pkg="handcontrol" type="teleop_mapper.py" name="teleop_mapper" output="screen">
+    <param name="max_linear_speed" value="$(arg max_linear_speed)"/>
+    <param name="max_angular_speed" value="$(arg max_angular_speed)"/>
+    <param name="linear_smooth_factor" value="0.3"/>
+    <param name="angular_smooth_factor" value="0.3"/>
+    <param name="wheel_base" value="0.287"/>
+    <param name="angle_deadzone" value="10.0"/>
+    <param name="publish_rate" value="30"/>
+  </node>
+</launch>

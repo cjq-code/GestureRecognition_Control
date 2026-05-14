@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>handcontrol</name>
+  <version>1.0.0</version>
+  <description>ROS1体感遥控移动底盘 - MediaPipe人体姿态控制差速底盘</description>
+  <maintainer email="user@example.com">user</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- 核心依赖 -->
+  <build_depend>rospy</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>message_generation</build_depend>
+  <build_depend>cv_bridge</build_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>trajectory_msgs</exec_depend>
+  <exec_depend>message_runtime</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+
+  <!-- 仿真依赖 -->
+  <exec_depend>turtlebot3_gazebo</exec_depend>
+  <exec_depend>turtlebot3_teleop</exec_depend>
+
+  <!-- Python依赖 (需pip安装): mediapipe, opencv-python, numpy -->
+</package>

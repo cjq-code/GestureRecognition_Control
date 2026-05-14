@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+<!--
+  handcontrol.launch - 体感遥控完整启动文件
+  
+  同时启动: body_pose_estimation + teleop_mapper
+  需配合仿真或实车（订阅同一 /cmd_vel）。
+  course_pkg 小车一键启动: roslaunch course_pkg demo_pose_teleop.launch
+  
+  用法示例:
+    # 终端1: roscore (如需要)
+    # 终端2: roslaunch course_pkg demo_pose_teleop.launch
+    # 或: roslaunch turtlebot3_gazebo turtlebot3_world.launch
+    #     roslaunch handcontrol handcontrol.launch
+-->
+<launch>
+  <!-- 参数配置 -->
+  <!-- 摄像头: 0=默认; 1,2…=其他设备; -1=自动探测第一个可用 V4L2 设备 -->
+  <arg name="camera_index" default="0"/>
+  <!-- 是否使用ROS图像话题 (替代直接摄像头) -->
+  <arg name="use_ros_topic" default="false"/>
+  <arg name="image_topic" default="/camera/image_raw"/>
+  <!-- 是否显示调试画面 -->
+  <arg name="show_debug" default="true"/>
+  <!-- 最大速度限制 -->
+  <arg name="max_linear_speed" default="0.5"/>
+  <arg name="max_angular_speed" default="2.0"/>
+  <!-- 轮距 (m)：TurtleBot3 约 0.287；course_pkg 小车与 URDF 中 wheelSeparation 一致时为 0.2 -->
+  <arg name="wheel_base" default="0.287"/>
+  <arg name="use_course_mapping" default="true"/>
+  <arg name="cmd_vel_out_topic" default="/cmd_vel_body"/>
+  <!-- 平滑系数 (越小越平滑, 越大响应越快) -->
+  <arg name="linear_smooth" default="0.3"/>
+  <arg name="angular_smooth" default="0.3"/>
+
+  <!-- 体感识别节点 -->
+  <node pkg="handcontrol" type="body_pose_estimation.py" name="body_pose_estimation" output="screen">
+    <param name="camera_index" value="$(arg camera_index)"/>
+    <param name="use_ros_topic" value="$(arg use_ros_topic)"/>
+    <param name="image_topic" value="$(arg image_topic)"/>
+    <param name="show_debug" value="$(arg show_debug)"/>
+    <param name="image_width" value="640"/>
+    <param name="image_height" value="480"/>
+    <param name="publish_rate" value="30"/>
+    <param name="use_course_mapping" value="$(arg use_course_mapping)"/>
+  </node>
+
+  <node pkg="handcontrol" type="teleop_mapper.py" name="teleop_mapper" output="screen">
+    <param name="max_linear_speed" value="$(arg max_linear_speed)"/>
+    <param name="max_angular_speed" value="$(arg max_angular_speed)"/>
+    <param name="linear_smooth_factor" value="$(arg linear_smooth)"/>
+    <param name="angular_smooth_factor" value="$(arg angular_smooth)"/>
+    <param name="wheel_base" value="$(arg wheel_base)"/>
+    <param name="angle_deadzone" value="10.0"/>
+    <param name="control_sensitivity" value="1.0"/>
+    <param name="signal_timeout" value="1.0"/>
+    <param name="publish_rate" value="30"/>
+    <param name="use_course_mapping" value="$(arg use_course_mapping)"/>
+    <param name="cmd_vel_out_topic" value="$(arg cmd_vel_out_topic)"/>
+  </node>
+
+  <node pkg="handcontrol" type="manip_teleop_bridge.py" name="manip_teleop_bridge" output="screen">
+    <param name="use_course_mapping" value="$(arg use_course_mapping)"/>
+  </node>
+
+</launch>

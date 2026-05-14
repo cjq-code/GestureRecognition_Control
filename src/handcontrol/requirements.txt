@@ -1,0 +1,16 @@
+# handcontrol - Python依赖
+# 安装: pip3 install -r requirements.txt
+
+# 核心依赖 (必须)
+# ROS Noetic 节点使用 /usr/bin/python3 (3.8)，请用该解释器安装，勿仅用 conda 的 pip：
+#   /usr/bin/python3 -m pip install --user -r requirements.txt
+# 在 py3.8 上 mediapipe>=0.10.11 可能拉取无法安装的 jaxlib，建议固定 0.10.5：
+mediapipe==0.10.5
+opencv-python>=4.8.0
+numpy>=1.21.0
+
+# ROS1依赖 (通过apt安装, 不是pip)
+# sudo apt install ros-noetic-cv-bridge ros-noetic-usb-cam
+
+# 可选: 用于笔记本内置摄像头支持
+# sudo apt install v4l-utils
