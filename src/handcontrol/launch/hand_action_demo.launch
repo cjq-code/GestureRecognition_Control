@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!--
+  hand_action_demo.launch - 只识别左右手动作，不控制小车。
+
+  输出：
+    /hand_action_demo/status       std_msgs/String(JSON)
+    /hand_action_demo/debug_image  sensor_msgs/Image
+-->
+<launch>
+  <arg name="camera_index" default="0"/>
+  <arg name="video_path" default=""/>
+  <arg name="loop_video" default="true"/>
+  <arg name="mirror_image" default="false"/>
+  <arg name="show_debug" default="true"/>
+  <arg name="open_threshold" default="0.75"/>
+  <arg name="axis_deadzone" default="0.18"/>
+  <arg name="axis_full_scale" default="0.95"/>
+  <arg name="direction_threshold" default="0.20"/>
+
+  <node pkg="handcontrol" type="hand_action_demo.py" name="hand_action_demo" output="screen">
+    <param name="camera_index" value="$(arg camera_index)"/>
+    <param name="video_path" value="$(arg video_path)"/>
+    <param name="loop_video" value="$(arg loop_video)"/>
+    <param name="mirror_image" value="$(arg mirror_image)"/>
+    <param name="show_debug" value="$(arg show_debug)"/>
+    <param name="image_width" value="640"/>
+    <param name="image_height" value="480"/>
+    <param name="publish_rate" value="30"/>
+    <param name="open_threshold" value="$(arg open_threshold)"/>
+    <param name="axis_deadzone" value="$(arg axis_deadzone)"/>
+    <param name="axis_full_scale" value="$(arg axis_full_scale)"/>
+    <param name="direction_threshold" value="$(arg direction_threshold)"/>
+  </node>
+</launch>

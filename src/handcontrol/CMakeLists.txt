@@ -40,6 +40,7 @@ catkin_install_python(PROGRAMS
   scripts/record_pose_test_video.py
   scripts/key_mouse_teleop.py
   scripts/initial_arm_pose.py
+  scripts/hand_action_demo.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

@@ -129,6 +129,8 @@ roslaunch turtlebot3_teleop turtlebot3_teleop_key.launch
 | 右手右移 | 右转 |
 | 右手斜向移动 | 前进/后退同时转向 |
 
+这里的左右方向按操作者本人视角定义，不按摄像头画面坐标定义：`right_hand_x_norm > 0` 表示手向人的右侧移动，`right_hand_x_norm < 0` 表示手向人的左侧移动。
+
 机械臂模式下，左手握拳举在肩旁进入 `ARM`，右手以右肩附近位置为零点，用离散动作触发机械臂预设姿态和夹爪：
 
 | 右手动作 | 机械臂/夹爪动作 |
@@ -318,7 +320,50 @@ roslaunch handcontrol body_pose_only.launch \
 
 调试画面会叠加当前模式与动作：`STANDBY`、`BASE`、`ARM`、`SAFETY`，以及右手摇杆/机械臂动作（如 `FORWARD`、`TURN_LEFT`、`EXTEND`、`GRIP_OPEN`）。体感识别节点同时发布 `/body_pose/debug_image`，可用 `rqt_image_view` 查看。`write_report:=true report_path:=auto` 会把时间节点、动作和控制逻辑保存为与视频同目录的 `*_recognition.md`。
 
-### 5.3 自动避障（cmd_vel 融合激光）
+### 5.3 MediaPipe 手部动作测试程序
+
+`hand_action_demo.py` 是独立的 MediaPipe 测试程序，只用于验证识别效果，不做小车模式判断，也不发布 `/cmd_vel` 或机械臂控制命令。
+
+它只判断：
+
+- 左手是否张开
+- 右手是否张开
+- 左手手腕相对左肩原点的方位
+- 右手手腕相对右肩原点的方位
+
+```bash
+# 使用摄像头测试
+roslaunch handcontrol hand_action_demo.launch camera_index:=0
+
+# 使用录制视频测试
+roslaunch handcontrol hand_action_demo.launch \
+  video_path:=/home/cjq/catkin_ws/pose_test_videos/body_pose_test_20260531_024131.mp4 \
+  loop_video:=false
+```
+
+输出话题：
+
+```bash
+rostopic echo /hand_action_demo/status
+```
+
+`/hand_action_demo/status` 是 `std_msgs/String` JSON 字符串，包含左右手张开状态、张开评分、归一化坐标和方位标签。方位标签包括：
+
+```text
+CENTER, UP, DOWN, LEFT, RIGHT, UP_LEFT, UP_RIGHT, DOWN_LEFT, DOWN_RIGHT
+```
+
+测试程序中的左右方向也按操作者本人视角定义：`x_norm > 0` 表示对应手向人的右侧移动，`x_norm < 0` 表示对应手向人的左侧移动。
+
+调试图像发布到：
+
+```text
+/hand_action_demo/debug_image
+```
+
+可用 `rqt_image_view` 查看。OpenCV 调试窗口左上角也会显示左右手识别结果。这个程序适合单独验证 MediaPipe 对手掌张开/握拳、手位于肩部原点哪个方向的识别是否稳定。
+
+### 5.4 自动避障（cmd_vel 融合激光）
 
 ```bash
 rosrun course_pkg cmd_vel_scan_avoid.py
@@ -327,7 +372,7 @@ rosrun course_pkg cmd_vel_scan_avoid.py
 - 检测到障碍物时自动减速/停止，发布安全 `/cmd_vel`
 - 当前一键体感启动默认绕过该节点，作为后续扩展功能保留；要启用时需让体感节点输出 `/cmd_vel_body`，再由本节点转发到 `/cmd_vel`
 
-### 5.4 键鼠 GUI 控制节点（无相机测试）
+### 5.5 键鼠 GUI 控制节点（无相机测试）
 
 ```bash
 roslaunch handcontrol key_mouse_teleop.launch
@@ -336,7 +381,7 @@ roslaunch handcontrol key_mouse_teleop.launch
 - 鼠标速度盘支持连续速度控制；键盘支持离散移动和机械臂/夹爪快捷键
 - 支持参数覆盖：`roslaunch handcontrol key_mouse_teleop.launch linear_speed:=0.4 angular_speed:=0.8`
 
-### 5.5 机械臂关节控制流程
+### 5.6 机械臂关节控制流程
 
 键盘/键鼠节点不会直接改 Gazebo 关节角度，而是发布 `trajectory_msgs/JointTrajectory` 到 `/arm_controller/command`。Gazebo 中的 `effort_controllers/JointTrajectoryController` 订阅该话题，根据 `/joint_states` 的实际关节角度做 PID，并通过 `gazebo_ros_control` 输出关节力矩。
 
@@ -352,13 +397,13 @@ key_mouse_teleop.py
 
 仿真启动时会自动发送一次机械臂准备姿态，避免控制器只保持接管瞬间的下垂姿态。URDF/控制器参数修改后必须完整重启 Gazebo，`/robot_description` 不会在运行中热更新。
 
-### 5.6 仿真小车摄像头
+### 5.7 仿真小车摄像头
 
 TB3 Waffle Pi 机械臂模型自带 Gazebo RGB 摄像头，当前话题为 `/camera/rgb/image_raw`，相机信息为 `/camera/rgb/camera_info`。摄像头安装在底盘前上方并向下俯视，主要覆盖机械臂前方抓取区和地面小物块。
 
 为保证 i3-N305 上的帧率，当前仿真相机使用 320x240、10 Hz；实测 `/camera/rgb/image_raw` 约 9.9 Hz。不要再额外叠加第二个 Gazebo 相机，除非明确需要多视角。
 
-### 5.7 保存地图
+### 5.8 保存地图
 
 ```bash
 rosrun map_server map_saver -f ~/my_map
@@ -477,7 +522,9 @@ catkin_ws/
 │   ├── course_pkg/                     # 自定义导航/仿真/体感集成
 │   │   └── launch/
 │   │       └── demo_tb3_keyboard_control.launch   # 键鼠/体感共享 Gazebo 仿真
-│   ├── handcontrol/                    # MediaPipe 体感遥控
+│   ├── handcontrol/                    # MediaPipe 体感遥控与手部动作测试
+│   │   ├── launch/hand_action_demo.launch          # 只测试左右手张开和手部方位
+│   │   └── scripts/hand_action_demo.py             # MediaPipe 手部动作测试程序
 │   ├── handcontrol_sim/                # 体感仿真辅助
 │   ├── turtlebot3/                     # TB3 官方包
 │   ├── turtlebot3_manipulation/        # TB3 + 机械臂
@@ -487,6 +534,7 @@ catkin_ws/
 ├── start_key_mouse_control.sh          # 键鼠 GUI 一键启动脚本
 ├── start_body_pose_control.sh          # 体感底盘控制一键启动脚本
 └── gazebo_models_worlds_collection-master/   # 额外模型与世界
+
 ```
 
 ---
@@ -502,4 +550,3 @@ catkin_ws/
 - **控制界面扩展**: 目前已有键盘、键鼠 GUI、体感三种入口；后续可扩展为 rqt 面板，但当前不需要手柄。
 
 ---
-

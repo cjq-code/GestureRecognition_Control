@@ -373,7 +373,10 @@ class BodyPoseEstimation:
 
         zero_x = rs.x
         zero_y = rs.y
-        raw_x = (rw.x - zero_x) / torso_scale
+        # MediaPipe image x grows to the viewer's right. For a front-facing
+        # camera this is opposite to the user's left/right, so invert x here:
+        # x_norm > 0 means the hand moves toward the user's right side.
+        raw_x = (zero_x - rw.x) / torso_scale
         raw_y = (zero_y - rw.y) / torso_scale
         x_norm = _axis_with_deadzone(raw_x, self.axis_deadzone, self.axis_full_scale)
         y_norm = _axis_with_deadzone(raw_y, self.axis_deadzone, self.axis_full_scale)
