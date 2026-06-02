@@ -23,7 +23,7 @@ def _scale_float_attrib(attrib: dict, key: str, s: float, power: float = 1.0) ->
     attrib[key] = str(float(attrib[key]) * (s ** power))
 
 
-def scale_urdf_tree(root: ET.Element, s: float) -> None:
+def scale_urdf_tree(root: ET.Element, s: float, control_period: float) -> None:
 
     for el in root.iter():
         tag = el.tag.split("}")[-1]  # strip namespace if any
@@ -68,12 +68,14 @@ def scale_urdf_tree(root: ET.Element, s: float) -> None:
             except ValueError:
                 pass
 
-    # Prismatic joint limits (meters)
+        elif tag == "controlPeriod":
+            el.text = str(control_period)
+
+    # Joint limits. Uniform scaling increases gravity torque demand; without
+    # scaling effort limits, effort controllers saturate and the arm goes limp.
     for joint in root.iter():
         jtag = joint.tag.split("}")[-1]
         if jtag != "joint":
-            continue
-        if joint.get("type") != "prismatic":
             continue
         lim = None
         for child in joint:
@@ -82,22 +84,35 @@ def scale_urdf_tree(root: ET.Element, s: float) -> None:
                 break
         if lim is None:
             continue
-        _scale_float_attrib(lim.attrib, "lower", s)
-        _scale_float_attrib(lim.attrib, "upper", s)
+
+        joint_type = joint.get("type")
+        if joint_type == "prismatic":
+            _scale_float_attrib(lim.attrib, "lower", s)
+            _scale_float_attrib(lim.attrib, "upper", s)
+            _scale_float_attrib(lim.attrib, "effort", s, power=3.0)
+        elif joint_type in ("revolute", "continuous"):
+            _scale_float_attrib(lim.attrib, "effort", s, power=4.0)
 
 
 def main():
     if len(sys.argv) < 2:
-        print("usage: scale_urdf_for_course.py SCALE < in.urdf > out.urdf", file=sys.stderr)
+        print(
+            "usage: scale_urdf_for_course.py SCALE [CONTROL_PERIOD] < in.urdf > out.urdf",
+            file=sys.stderr,
+        )
         sys.exit(1)
     s = float(sys.argv[1])
+    control_period = float(sys.argv[2]) if len(sys.argv) >= 3 else 0.002
     if s <= 0:
         print("SCALE must be positive", file=sys.stderr)
+        sys.exit(1)
+    if control_period <= 0:
+        print("CONTROL_PERIOD must be positive", file=sys.stderr)
         sys.exit(1)
 
     text = sys.stdin.read()
     root = ET.fromstring(text)
-    scale_urdf_tree(root, s)
+    scale_urdf_tree(root, s, control_period)
     out = ET.tostring(root, encoding="unicode")
     # ElementTree drops XML declaration; Gazebo is fine without it
     sys.stdout.write(out)

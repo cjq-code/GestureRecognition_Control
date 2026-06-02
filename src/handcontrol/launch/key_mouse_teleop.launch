@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!--
+  key_mouse_teleop.launch - GUI keyboard/mouse control without camera.
+
+  The node directly publishes /cmd_vel, /arm_controller/command and
+  /gripper_controller/command. Use it with a running robot simulation that has
+  those controllers loaded.
+-->
+<launch>
+  <arg name="linear_speed" default="0.3"/>
+  <arg name="angular_speed" default="0.5"/>
+  <arg name="publish_rate" default="30"/>
+  <arg name="cmd_vel_topic" default="/cmd_vel"/>
+  <arg name="arm_command_topic" default="/arm_controller/command"/>
+  <arg name="gripper_command_topic" default="/gripper_controller/command"/>
+  <arg name="retract_on_shutdown" default="true"/>
+  <arg name="initial_arm_pose" default="ready"/>
+  <arg name="publish_body_pose" default="true"/>
+
+  <node pkg="handcontrol" type="key_mouse_teleop.py" name="key_mouse_teleop" output="screen">
+    <param name="linear_speed" value="$(arg linear_speed)"/>
+    <param name="angular_speed" value="$(arg angular_speed)"/>
+    <param name="publish_rate" value="$(arg publish_rate)"/>
+    <param name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
+    <param name="arm_command_topic" value="$(arg arm_command_topic)"/>
+    <param name="gripper_command_topic" value="$(arg gripper_command_topic)"/>
+    <param name="retract_on_shutdown" value="$(arg retract_on_shutdown)"/>
+    <param name="initial_arm_pose" value="$(arg initial_arm_pose)"/>
+    <param name="publish_body_pose" value="$(arg publish_body_pose)"/>
+  </node>
+</launch>

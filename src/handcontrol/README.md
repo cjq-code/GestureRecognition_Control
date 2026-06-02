@@ -4,20 +4,20 @@
 
 ## 项目概述
 
-使用**普通摄像头** + **MediaPipe人体姿态识别**，通过**双臂角度**来控制 Gazebo 仿真中的差速移动底盘，实现真正的"体感遥控"。
+使用**普通摄像头** + **MediaPipe Holistic 人体/手势识别**，按工作空间根 README 的体感方案控制 Gazebo 仿真中的差速底盘、机械臂和夹爪。
 
 ### 系统架构
 
 ```
 摄像头 (/dev/videoX)
     ↓ sensor_msgs/Image
-[body_pose_estimation.py]  —— MediaPipe Pose 提取33个关键点
-    - 计算双臂角度、状态判断
+[body_pose_estimation.py]  —— MediaPipe Holistic 提取身体和双手关键点
+    - 识别左手模式、安全锁、右手摇杆/机械臂动作
     - 发布 /body_pose (自定义消息)
     ↓
 [teleop_mapper.py]  —— 状态机 + 速度映射 + 平滑滤波
-    - IDLE(待机) / CONTROL(控制) / EMERGENCY(急停)
-    - 角度→速度映射
+    - STANDBY(待机) / BASE(底盘) / ARM(机械臂) / SAFETY(安全锁定)
+    - 右手摇杆→速度映射
     - 指数移动平均滤波
     - 发布 /cmd_vel (geometry_msgs/Twist)
     ↓
@@ -28,14 +28,14 @@
 
 ### 控制方式
 
-| 姿态 | 状态 | 底盘动作 |
-|------|------|----------|
-| 双臂自然下垂 | IDLE | 停止 |
-| 双臂向前上方抬起 | CONTROL | 前进 |
-| 双臂向后下方伸展 | CONTROL | 后退 |
-| 左臂抬、右臂放 | CONTROL | 原地左转 |
-| 右臂抬、左臂放 | CONTROL | 原地右转 |
-| 双手举过头顶 | EMERGENCY | 紧急停止 |
+| 左手动作 | 当前模式 | 右手动作 | 控制结果 |
+|----------|----------|----------|----------|
+| 左手放下 | STANDBY | 任意 | 底盘停止，机械臂保持当前位置 |
+| 左手张开并举在肩旁 | BASE | 右手作为空中摇杆 | 控制底盘前后/转向 |
+| 左手握拳并举在肩旁 | ARM | 右手位置 + 手势 | 控制机械臂与夹爪 |
+| 双手合十或交叉在胸前 | SAFETY | 任意 | 立即停车，暂停体感控制 |
+
+调试画面会叠加 `MODE` 与 `ACTION`，并发布 `/body_pose/debug_image`。
 
 ## 环境要求
 
@@ -149,12 +149,14 @@ roslaunch handcontrol handcontrol.launch camera_index:=1 max_linear_speed:=0.3 s
 roslaunch handcontrol body_pose_only.launch camera_index:=0
 # 查看话题: rostopic echo /body_pose
 # 查看图像: rqt_image_view 选择 /body_pose/debug_image
-```
 
-**仅调试控制映射** (已有 /body_pose)
-```bash
-roslaunch handcontrol teleop_only.launch max_linear_speed:=0.5
-# 查看输出: rostopic echo /cmd_vel
+# 回放录制的视频做识别测试
+roslaunch handcontrol body_pose_only.launch video_path:=~/catkin_ws/pose_test_videos/body_pose_test_20260531_024131.mp4
+
+# 离线分析完整视频，并在视频同目录生成 *_recognition.md
+roslaunch handcontrol body_pose_only.launch \
+  video_path:=~/catkin_ws/pose_test_videos/body_pose_test_20260531_024131.mp4 \
+  show_debug:=false loop_video:=false write_report:=true report_path:=auto
 ```
 
 ## 话题列表
@@ -173,6 +175,12 @@ roslaunch handcontrol teleop_only.launch max_linear_speed:=0.5
 | 参数名 | 默认值 | 说明 |
 |--------|--------|------|
 | `camera_index` | 0 | 摄像头设备索引 |
+| `video_path` | 空 | 指定 mp4/avi 文件时用视频替代摄像头 |
+| `loop_video` | true | 视频结束后循环播放 |
+| `mirror_image` | false | 水平翻转输入画面 |
+| `write_report` | false | 视频处理结束时写出识别报告 |
+| `report_path` | 空 | 报告路径；`auto` 表示保存到视频同目录 `*_recognition.md` |
+| `report_sample_interval` | 0.0 | 报告采样间隔秒数，0 表示每帧记录 |
 | `use_ros_topic` | false | 使用ROS图像话题代替直连摄像头 |
 | `image_topic` | /camera/image_raw | ROS图像话题名 |
 | `show_debug` | true | 显示调试图像窗口 |
@@ -257,15 +265,17 @@ handcontrol/
 ├── README.md                   # 本文件
 ├── msg/
 │   └── BodyPose.msg            # 自定义姿态消息
-├── launch/
-│   ├── handcontrol.launch      # 完整启动
-│   ├── body_pose_only.launch   # 仅姿态识别
-│   └── teleop_only.launch      # 仅控制映射
+	├── launch/
+	│   ├── handcontrol.launch      # 完整启动
+	│   ├── body_pose_only.launch   # 仅姿态识别
+	│   └── key_mouse_teleop.launch # 键鼠 GUI 控制
 ├── config/
 │   └── (参数配置文件)
 └── scripts/
-    ├── body_pose_estimation.py # 体感识别节点
-    └── teleop_mapper.py        # 控制映射节点
+	├── body_pose_estimation.py # 体感识别节点
+	├── teleop_mapper.py        # 底盘速度映射节点
+	├── manip_teleop_bridge.py  # 体感机械臂离散动作桥接
+	└── key_mouse_teleop.py     # 键鼠 GUI 控制节点
 ```
 
 ## 技术亮点

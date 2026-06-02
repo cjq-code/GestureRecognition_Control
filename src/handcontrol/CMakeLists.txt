@@ -37,6 +37,9 @@ catkin_install_python(PROGRAMS
   scripts/teleop_mapper.py
   scripts/manip_teleop_bridge.py
   scripts/list_usb_cameras.py
+  scripts/record_pose_test_video.py
+  scripts/key_mouse_teleop.py
+  scripts/initial_arm_pose.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

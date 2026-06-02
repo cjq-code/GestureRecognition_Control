@@ -4,11 +4,24 @@
 -->
 <launch>
   <arg name="camera_index" default="0"/>
+  <arg name="video_path" default=""/>
+  <arg name="loop_video" default="true"/>
+  <arg name="mirror_image" default="false"/>
+  <arg name="write_report" default="false"/>
+  <arg name="report_path" default=""/>
+  <arg name="report_sample_interval" default="0.0"/>
   <arg name="show_debug" default="true"/>
 
   <node pkg="handcontrol" type="body_pose_estimation.py" name="body_pose_estimation" output="screen">
     <param name="camera_index" value="$(arg camera_index)"/>
+    <param name="video_path" value="$(arg video_path)"/>
+    <param name="loop_video" value="$(arg loop_video)"/>
+    <param name="mirror_image" value="$(arg mirror_image)"/>
+    <param name="write_report" value="$(arg write_report)"/>
+    <param name="report_path" value="$(arg report_path)"/>
+    <param name="report_sample_interval" value="$(arg report_sample_interval)"/>
     <param name="show_debug" value="$(arg show_debug)"/>
     <param name="publish_rate" value="30"/>
+    <param name="use_course_mapping" value="true"/>
   </node>
 </launch>

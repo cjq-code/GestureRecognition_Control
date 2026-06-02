@@ -1,0 +1,323 @@
+================================================================================
+  catkin_ws 修改记录
+  日期: 2026-05-21  ~  2026-05-30
+================================================================================
+
+一、src/handcontrol/scripts/body_pose_simulator.py（新建，多次迭代）
+--------------------------------------------------------------------------------
+功能：键盘模拟 MediaPipe 体感节点，无需外接相机即可测试底盘、机械臂、夹爪。
+
+底盘控制：
+  - 直接发布 /cmd_vel，绕过 teleop_mapper 的平滑延迟
+  - 线速度 ±0.3 m/s
+  - 角速度 ±0.5 rad/s
+  - 触发式控制：W/A/S/D 直接设定固定速度，新指令自动覆盖旧指令，不叠加
+  - X/空格：停止
+
+机械臂控制：
+  - 直接发布 /arm_controller/command（trajectory_msgs/JointTrajectory）
+  - 默认 4 关节：["joint1", "joint2", "joint3", "joint4"]
+  - 两种姿态：
+      1 = 抬起（末端水平，与底盘平行） [0.0, -1.0, 1.3, -0.3]
+      2 = 收回                         [0.0, 0.0, 0.0, 0.0]
+  - JointTrajectory 已补 header.stamp = rospy.Time(0)，确保控制器正确接收
+  - arm_traj_time 默认 1.0 秒，给机械臂足够运动时间
+  - 支持 ROS param 自定义关节名和姿态角度
+  - 启动安全检查：grasp_pose / retract_pose 长度必须与 arm_joint_names 一致
+
+夹爪控制：
+  - 直接发布 /gripper_controller/command（JointTrajectory）
+  - 双关节同时控制：["gripper", "gripper_sub"]
+  - 已补 header.stamp
+
+兼容 /body_pose：
+  - 继续发布该话题，保证 teleop_mapper / manip_teleop_bridge /
+    cmd_vel_scan_avoid 等下游节点正常工作
+
+退出保护：
+  - Ctrl+C 时自动归零底盘速度、收回机械臂姿态
+
+键盘映射：
+  W/S/A/D     前进/后退/左转/右转
+  X/空格       停止
+  E            解锁底盘
+  Q            取消解锁
+  R            急停
+  U            恢复急停
+  1            机械臂抬起姿态（末端水平）
+  2            机械臂收回姿态
+  O            夹爪张开
+  C            夹爪闭合
+
+
+二、src/handcontrol/CMakeLists.txt
+--------------------------------------------------------------------------------
+在 catkin_install_python(PROGRAMS ...) 中追加：
+  scripts/body_pose_simulator.py
+使 rosrun handcontrol body_pose_simulator.py 能正常找到该节点。
+
+
+三、src/handcontrol/scripts/manip_teleop_bridge.py
+--------------------------------------------------------------------------------
+- _send_arm() / _send_grip() 中 JointTrajectory 补 header.stamp = rospy.Time.now()
+- 避免 position_controllers/effort_controllers 因缺时间戳而拒收轨迹
+
+
+四、src/turtlebot3_manipulation_simulations/turtlebot3_manipulation_gazebo/config/gripper_controller.yaml
+--------------------------------------------------------------------------------
+- 新增 gripper_sub 关节到 joints 列表
+- 新增 gripper_sub 的 constraints 和 gains（PID: p=100, d=1, i=1, i_clamp=1）
+- 解决夹爪只动一边的问题
+
+修改前：
+  joints:
+    - gripper
+  gains:
+    gripper: {p: 100, d: 1, i: 1, i_clamp: 1}
+
+修改后：
+  joints:
+    - gripper
+    - gripper_sub
+  gains:
+    gripper: {p: 100, d: 1, i: 1, i_clamp: 1}
+    gripper_sub: {p: 100, d: 1, i: 1, i_clamp: 1}
+
+
+五、src/turtlebot3_manipulation_simulations/turtlebot3_manipulation_gazebo/config/gazebo_controller.yaml
+--------------------------------------------------------------------------------
+大幅提高所有机械臂关节 PID 增益，使关节在底盘运动时也能保持姿态、不晃动。
+
+修改前：
+  joint1: {p: 300.0, i: 0.1, d: 1.0, i_clamp: 0.2}
+  joint2: {p: 300.0, i: 0.1, d: 1.0, i_clamp: 0.2}
+  joint3: {p: 300.0, i: 0.1, d: 1.0, i_clamp: 0.2}
+  joint4: {p: 300.0, i: 0.1, d: 1.0, i_clamp: 0.2}
+  gripper_sub: {p: 300.0, i: 0.1, d: 1.0, i_clamp: 0.2}
+
+修改后：
+  joint1: {p: 3000.0, i: 0.5, d: 10.0, i_clamp: 1.0}
+  joint2: {p: 3000.0, i: 0.5, d: 10.0, i_clamp: 1.0}
+  joint3: {p: 3000.0, i: 0.5, d: 10.0, i_clamp: 1.0}
+  joint4: {p: 3000.0, i: 0.5, d: 10.0, i_clamp: 1.0}
+  gripper_sub: {p: 3000.0, i: 0.5, d: 10.0, i_clamp: 1.0}
+
+
+六、src/turtlebot3_manipulation_simulations/turtlebot3_manipulation_gazebo/config/arm_controller.yaml
+--------------------------------------------------------------------------------
+根本修复：机械臂控制器类型从 position_controllers 改为 effort_controllers。
+
+原因：course_pkg 对 URDF 做了 1.92 倍均匀缩放，link 惯性增大 ~25 倍。
+PositionJointInterface 的 effort limit 固定为 1，控制器输出被截断，导致
+机械臂完全无法响应轨迹命令。改成 EffortJointInterface 后，Gazebo 通过 PID
+把 effort 直接作用于关节物理模型，能输出足够力矩。
+
+修改前：
+  arm_controller:
+    type: position_controllers/JointTrajectoryController
+
+修改后：
+  arm_controller:
+    type: effort_controllers/JointTrajectoryController
+
+
+七、src/turtlebot3_manipulation/turtlebot3_manipulation_description/urdf/open_manipulator_x.transmission.xacro
+--------------------------------------------------------------------------------
+joint1 ~ joint4 的 transmission 宏从 SimpleTransmissionPosition 改为
+SimpleTransmissionEffort，hardwareInterface 同步改为
+hardware_interface/EffortJointInterface，与 arm_controller 的 effort 类型匹配。
+
+修改前：
+  <xacro:SimpleTransmissionPosition n="1" joint="joint1" />
+  <xacro:SimpleTransmissionPosition n="2" joint="joint2" />
+  <xacro:SimpleTransmissionPosition n="3" joint="joint3" />
+  <xacro:SimpleTransmissionPosition n="4" joint="joint4" />
+
+修改后：
+  <xacro:SimpleTransmissionEffort n="1" joint="joint1" />
+  <xacro:SimpleTransmissionEffort n="2" joint="joint2" />
+  <xacro:SimpleTransmissionEffort n="3" joint="joint3" />
+  <xacro:SimpleTransmissionEffort n="4" joint="joint4" />
+
+
+八、src/turtlebot3_manipulation/turtlebot3_manipulation_description/urdf/open_manipulator_x.urdf.xacro
+--------------------------------------------------------------------------------
+删除 end_effector_link 的 visual 模型（1cm 红色方块）。
+该 link 本是 TF 参考帧，不需要渲染；两爪之间的红色方块会与被抓物体穿模。
+
+修改前：
+  <link name="end_effector_link">
+    <visual>
+      ...
+      <box size="0.01 0.01 0.01" />
+      <material name="red"/>
+    </visual>
+    <inertial> ... </inertial>
+  </link>
+
+修改后：
+  <link name="end_effector_link">
+    <inertial> ... </inertial>
+  </link>
+
+
+九、src/course_pkg/launch/demo_tb3_keyboard_control.launch（新建）
+--------------------------------------------------------------------------------
+基于 demo_tb3_open_manip_pose_course.launch 裁剪：
+- 去掉 handcontrol（无需摄像头）
+- 去掉 cmd_vel_scan_avoid（避免与 body_pose_simulator 抢占 /cmd_vel）
+- 保留 Gazebo、机械臂控制器、robot_state_publisher
+
+用法：
+  roslaunch course_pkg demo_tb3_keyboard_control.launch
+
+
+十、start_keyboard_control.sh（新建，工作空间根目录）
+--------------------------------------------------------------------------------
+一键启动脚本：
+1. source ROS 环境
+2. roslaunch demo_tb3_keyboard_control.launch（后台）
+3. 等待 12 秒让 Gazebo 加载
+4. 自动弹出 gnome-terminal 运行 body_pose_simulator.py
+
+用法：
+  cd ~/catkin_ws && ./start_keyboard_control.sh
+
+
+十一、2026-06-01 体感底盘控制启动修复与说明补充
+--------------------------------------------------------------------------------
+目标：
+  - 第一阶段用体感识别替代键鼠控制底盘
+  - 保持已有 Gazebo 场景、小车、机械臂模型不变
+  - 双手合十或交叉在胸前时，底盘速度必须立即归零
+
+本次修复：
+  1. start_body_pose_control.sh
+     - CAMERA_INDEX=0 时固定使用外接 USB 摄像头，不再给体感节点传默认视频路径
+     - CAMERA_INDEX=1 时才使用录制视频
+     - 默认录制视频改为绝对路径：
+       /home/cjq/catkin_ws/pose_test_videos/body_pose_test_20260531_024131.mp4
+     - 启动时打印实际传给 handcontrol.launch 的 roslaunch 参数，便于排查输入源
+     - 默认仍打开 Gazebo GUI 和体感识别调试画面
+
+  2. src/handcontrol/scripts/body_pose_estimation.py
+     - 新增视频路径解析函数 _resolve_input_path()
+     - 空 video_path 表示使用摄像头
+     - 绝对路径直接使用
+     - 相对路径优先检查当前目录；若不存在，再按 ~/catkin_ws/<相对路径> 解析
+     - 修复 ROS 节点工作目录为 ~/.ros 时，相对视频路径被错误解析为
+       /home/cjq/.ros/pose_test_videos/... 的问题
+
+  3. README.md
+     - 细化 4.9 “TurtleBot3 + 机械臂 体感底盘控制仿真”
+     - 明确启动命令：
+       ./start_body_pose_control.sh
+       CAMERA_INDEX=0 ./start_body_pose_control.sh
+       CAMERA_INDEX=1 ./start_body_pose_control.sh
+       CAMERA_INDEX=1 VIDEO_PATH=/home/cjq/catkin_ws/pose_test_videos/pose_test.mp4 ./start_body_pose_control.sh
+     - 明确可选项：
+       CAMERA_INDEX=0   外接 USB 摄像头 /dev/video0
+       CAMERA_INDEX=1   已录制视频回放
+       VIDEO_PATH       录制视频路径，仅 CAMERA_INDEX=1 时生效
+       GAZEBO_GUI       是否显示 Gazebo 图形窗口，默认 true
+       SHOW_DEBUG       是否显示体感识别 OpenCV 调试画面，默认 true
+     - 补充单独启动 handcontrol.launch 的命令
+     - 补充常见错误排查，包括视频路径被解析到 ~/.ros、摄像头打不开、
+       多节点同时发布 /cmd_vel 等问题
+     - 新增“体感抓取任务阶段规划”
+       第一阶段：体感控制底盘，当前已完成
+       第二阶段：体感离散命令触发机械臂预设动作
+       第三阶段：半自动抓取/放置状态机
+       第四阶段：视觉感知、导航和避障扩展
+     - 新增“尚未解决的进阶问题”
+       包括物块识别、夹爪对准、抓取成功判断、放置成功判断、
+       机械臂碰撞约束、车体稳定性、体感误识别、命令去抖、
+       避障恢复、多节点抢占 /cmd_vel 等
+
+  4. 2026-06-02 体感机械臂离散控制
+     - 右手控制零点从胸前改到右肩附近
+     - 左手握拳举在肩旁进入 ARM 模式后，右手上移触发 ready/抬起姿态
+     - 左手握拳举在肩旁进入 ARM 模式后，右手下移触发 grasp/前伸抓取姿态
+     - 机械臂控制仍为离散预设姿态，复用键鼠控制的 1/2 姿态，不做连续关节映射
+     - start_body_pose_control.sh 默认启用 use_manip_bridge:=true
+     - handcontrol.launch 默认启用 manip_teleop_bridge
+
+  5. 2026-06-02 抓取物块滑落问题修复
+     - simple_course.world 中 4 个地面物块质量从约 40～50 g 降到约 15～18 g
+     - simple_course.world 中物块 ODE 摩擦从 mu/mu2=1.1 提高到 4.0
+     - simple_course.world 中物块接触参数增加 kp/kd/max_vel/min_depth，提高接触稳定性
+     - open_manipulator_x.gazebo.xacro 中夹爪/机械臂 link Gazebo 摩擦从 30 提高到 80
+     - open_manipulator_x.gazebo.xacro 中接触 maxVel 降低、minDepth 增大，减少夹持抖动
+     - open_manipulator_x.urdf.xacro 中 gripper / gripper_sub effort 从 1 提高到 8
+     - gripper_controller.yaml 中夹爪 PID 从 p=100,d=1,i=1 提高到 p=400,d=4,i=2
+     - README 补充抓取滑落排查说明
+     - 注意：world、URDF/xacro、controller yaml 都只在 Gazebo 启动时加载，必须完整重启 Gazebo 才生效
+
+  6. 2026-06-02 机械臂动作时底盘强制停止
+     - teleop_mapper.py 中 course mapping 模式下，MODE_ARM 与 MODE_SAFETY 一样立即发布 Twist() 零速度
+     - 进入左手握拳的 ARM 模式后，不再通过平滑减速慢慢停，而是直接将 target/current 线速度和角速度清零
+     - README 补充说明：机械臂动作过程中底盘不能继续移动
+
+  7. 2026-06-02 模式切换安全门与底盘速度调整
+     - body_pose_estimation.py 新增模式切换门控：
+       BASE 和 ARM 之间不能直接互切，必须先双手合十或交叉进入 SAFETY
+     - 未经过 SAFETY 的 BASE/ARM 互切会被压成 STANDBY，避免误识别直接切模式
+     - teleop_mapper.py 中底盘左右转向改为离散慢速转：
+       右手左右偏移超过 turn_step_deadzone=0.12 后，以固定 max_angular_speed 转向
+       右手回到中心死区后角速度立即变为 0
+     - start_body_pose_control.sh 中体感最大线速度从 0.22 m/s 降到 0.15 m/s
+     - start_body_pose_control.sh 中体感最大角速度从 1.0 rad/s 降到 0.18 rad/s
+
+  8. 2026-06-02 STANDBY 强制零速度
+     - teleop_mapper.py 中 MODE_STANDBY 与 MODE_ARM / MODE_SAFETY 一样立即发布 Twist() 零速度
+     - 左手放下、未形成有效模式、或模式切换门控压成 STANDBY 时，不再走平滑减速
+     - 体感信号超时或丢失时也立即发布 Twist() 零速度，不再平滑减速
+     - target/current 线速度和角速度都会直接清零，避免待机时继承上一帧底盘速度
+     - README 补充 STANDBY 立即清零说明
+
+  9. 2026-06-02 清理旧控制版本与临时文件
+     - 保留最终键鼠入口：
+       start_key_mouse_control.sh
+       src/handcontrol/scripts/key_mouse_teleop.py
+       src/handcontrol/launch/key_mouse_teleop.launch
+     - 保留最终体感入口：
+       start_body_pose_control.sh
+       src/handcontrol/scripts/body_pose_estimation.py
+       src/handcontrol/scripts/teleop_mapper.py
+       src/handcontrol/scripts/manip_teleop_bridge.py
+       src/handcontrol/launch/handcontrol.launch
+     - 保留两套最终入口共用的 Gazebo 仿真：
+       src/course_pkg/launch/demo_tb3_keyboard_control.launch
+       src/course_pkg/worlds/simple_course.world
+       src/handcontrol/scripts/initial_arm_pose.py
+
+
+
+验证：
+  - bash -n start_body_pose_control.sh
+  - python3 -m py_compile src/handcontrol/scripts/body_pose_estimation.py
+  - roslaunch --nodes handcontrol handcontrol.launch camera_index:=0 video_path:= loop_video:=false show_debug:=true cmd_vel_out_topic:=/cmd_vel use_manip_bridge:=false
+  - roslaunch --nodes handcontrol handcontrol.launch camera_index:=0 video_path:=/home/cjq/catkin_ws/pose_test_videos/body_pose_test_20260531_024131.mp4 loop_video:=true show_debug:=true cmd_vel_out_topic:=/cmd_vel use_manip_bridge:=false
+
+
+================================================================================
+  已知问题与注意事项
+================================================================================
+
+1. 依赖安装
+   - ros-noetic-joint-trajectory-controller 和 ros-noetic-effort-controllers
+     必须已安装（已确认系统已装）。若未安装：
+     sudo apt-get install ros-noetic-joint-trajectory-controller ros-noetic-effort-controllers
+
+2. URDF / YAML / 代码修改后需重启 Gazebo
+   - gazebo_controller.yaml、gripper_controller.yaml、arm_controller.yaml
+   - 所有 .xacro / .urdf 文件
+   - 上述修改只在 Gazebo 启动时加载一次，修改后必须重启 Gazebo 才能生效。
+
+3. 控制链路说明（键盘控制模式）
+   body_pose_simulator → /cmd_vel              → Gazebo diff_drive
+                         /arm_controller/command → arm_controller (effort)
+                         /gripper_controller/command → gripper_controller (effort)
+   不经过 teleop_mapper / cmd_vel_scan_avoid，响应最直接。
+
+================================================================================

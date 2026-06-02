@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<!--
+  TurtleBot3 + OpenMANIPULATOR-X shared simulation for key/mouse and body-pose control.
+
+  用法:
+    roslaunch course_pkg demo_tb3_keyboard_control.launch
+
+  说明:
+    - Only starts Gazebo, robot model, controllers, and initial arm pose.
+    - Final control entry points are:
+      ./start_key_mouse_control.sh
+      ./start_body_pose_control.sh
+    - Does not start cmd_vel_scan_avoid; body-pose control currently publishes /cmd_vel directly.
+-->
+<launch>
+  <arg name="world" default="$(find course_pkg)/worlds/simple_course.world"/>
+  <arg name="spawn_x" default="0.0"/>
+  <arg name="spawn_y" default="0.0"/>
+  <arg name="spawn_z" default="0.01"/>
+  <arg name="spawn_yaw" default="0.0"/>
+  <arg name="paused" default="false"/>
+  <arg name="gui" default="true"/>
+  <arg name="use_initial_arm_pose" default="true"/>
+  <!-- 均匀缩放 URDF，使小车+机械臂约 1 m 级 -->
+  <arg name="robot_scale" default="1.92"/>
+  <!-- 2 ms 控制周期配合轻量物理步长，降低低功耗 CPU 压力 -->
+  <arg name="control_period" default="0.002"/>
+
+  <env name="TURTLEBOT3_MODEL" value="waffle_pi"/>
+  <env name="GAZEBO_MODEL_PATH" value="$(find course_pkg)/gazebo_models:$(optenv GAZEBO_MODEL_PATH)"/>
+
+  <param name="use_sim_time" value="true"/>
+
+  <rosparam file="$(find turtlebot3_manipulation_gazebo)/config/gazebo_controller.yaml" command="load"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(arg world)"/>
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="use_sim_time" value="true"/>
+  </include>
+
+  <param name="robot_description"
+         command="$(find course_pkg)/scripts/gen_scaled_robot_description.sh $(arg robot_scale) $(arg control_period)"/>
+
+  <node name="spawn_tb3_manipulation" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
+        args="-urdf -param robot_description -model turtlebot3_with_open_manipulator
+              -x $(arg spawn_x) -y $(arg spawn_y) -z $(arg spawn_z) -Y $(arg spawn_yaw)
+              -J joint1 0.0 -J joint2 0.75 -J joint3 -0.25 -J joint4 -0.35
+              -J gripper 0.0 -J gripper_sub 0.0"/>
+
+  <include file="$(find turtlebot3_manipulation_gazebo)/launch/controller_utils.launch"/>
+  <include file="$(find turtlebot3_manipulation_gazebo)/launch/turtlebot3_manipulation_controller.launch"/>
+
+  <node if="$(arg use_initial_arm_pose)" pkg="handcontrol" type="initial_arm_pose.py"
+        name="initial_arm_pose" output="screen">
+    <rosparam param="ready_pose">[0.0, 0.75, -0.25, -0.35]</rosparam>
+    <param name="arm_traj_time" value="1.0"/>
+  </node>
+
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen"/>
+
+</launch>

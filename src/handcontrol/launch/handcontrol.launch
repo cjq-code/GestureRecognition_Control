@@ -4,18 +4,23 @@
   
   同时启动: body_pose_estimation + teleop_mapper
   需配合仿真或实车（订阅同一 /cmd_vel）。
-  course_pkg 小车一键启动: roslaunch course_pkg demo_pose_teleop.launch
   
   用法示例:
     # 终端1: roscore (如需要)
-    # 终端2: roslaunch course_pkg demo_pose_teleop.launch
-    # 或: roslaunch turtlebot3_gazebo turtlebot3_world.launch
-    #     roslaunch handcontrol handcontrol.launch
+    # 终端2: roslaunch handcontrol handcontrol.launch
+    # 推荐完整入口: ./start_body_pose_control.sh
 -->
 <launch>
   <!-- 参数配置 -->
   <!-- 摄像头: 0=默认; 1,2…=其他设备; -1=自动探测第一个可用 V4L2 设备 -->
   <arg name="camera_index" default="0"/>
+  <!-- 可选：用录制视频替代摄像头，例如 ~/catkin_ws/pose_test_videos/body_pose_test_xxx.mp4 -->
+  <arg name="video_path" default=""/>
+  <arg name="loop_video" default="true"/>
+  <arg name="mirror_image" default="false"/>
+  <arg name="write_report" default="false"/>
+  <arg name="report_path" default=""/>
+  <arg name="report_sample_interval" default="0.0"/>
   <!-- 是否使用ROS图像话题 (替代直接摄像头) -->
   <arg name="use_ros_topic" default="false"/>
   <arg name="image_topic" default="/camera/image_raw"/>
@@ -28,6 +33,7 @@
   <arg name="wheel_base" default="0.287"/>
   <arg name="use_course_mapping" default="true"/>
   <arg name="cmd_vel_out_topic" default="/cmd_vel_body"/>
+  <arg name="use_manip_bridge" default="true"/>
   <!-- 平滑系数 (越小越平滑, 越大响应越快) -->
   <arg name="linear_smooth" default="0.3"/>
   <arg name="angular_smooth" default="0.3"/>
@@ -35,6 +41,12 @@
   <!-- 体感识别节点 -->
   <node pkg="handcontrol" type="body_pose_estimation.py" name="body_pose_estimation" output="screen">
     <param name="camera_index" value="$(arg camera_index)"/>
+    <param name="video_path" value="$(arg video_path)"/>
+    <param name="loop_video" value="$(arg loop_video)"/>
+    <param name="mirror_image" value="$(arg mirror_image)"/>
+    <param name="write_report" value="$(arg write_report)"/>
+    <param name="report_path" value="$(arg report_path)"/>
+    <param name="report_sample_interval" value="$(arg report_sample_interval)"/>
     <param name="use_ros_topic" value="$(arg use_ros_topic)"/>
     <param name="image_topic" value="$(arg image_topic)"/>
     <param name="show_debug" value="$(arg show_debug)"/>
@@ -58,7 +70,7 @@
     <param name="cmd_vel_out_topic" value="$(arg cmd_vel_out_topic)"/>
   </node>
 
-  <node pkg="handcontrol" type="manip_teleop_bridge.py" name="manip_teleop_bridge" output="screen">
+  <node if="$(arg use_manip_bridge)" pkg="handcontrol" type="manip_teleop_bridge.py" name="manip_teleop_bridge" output="screen">
     <param name="use_course_mapping" value="$(arg use_course_mapping)"/>
   </node>
 

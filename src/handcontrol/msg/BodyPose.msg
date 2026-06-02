@@ -49,3 +49,24 @@ float32 leg_forward_norm
 
 # 腿部侧向意图 -1~1，正值表示更偏向右侧迈步（映射右转）
 float32 leg_lateral_norm
+
+# --- README 当前体感交互方案（左手模式 + 右手连续控制）---
+# 0=待机, 1=底盘模式, 2=机械臂模式, 3=安全锁定
+int8 control_mode
+
+# 便于调试画面/rostopic echo 直接查看当前识别结果
+string mode_label
+string action_label
+
+# 左/右手手势分类
+int8 left_palm_open
+int8 left_fist
+int8 right_palm_open
+int8 right_fist
+
+# 右手相对右肩附近零点的归一化控制量：x 右正，y 上正
+float32 right_hand_x_norm
+float32 right_hand_y_norm
+
+# 右臂伸展意图：-1 收回，+1 前伸（单目摄像头下由肘角和肩腕距离估计）
+float32 right_hand_depth_norm
