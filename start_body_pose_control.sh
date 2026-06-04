@@ -14,6 +14,8 @@ export TURTLEBOT3_MODEL=waffle_pi
 GAZEBO_GUI="${GAZEBO_GUI:-true}"
 CAMERA_INDEX="${CAMERA_INDEX:-0}"
 SHOW_DEBUG="${SHOW_DEBUG:-true}"
+AUTO_VISION="${AUTO_VISION:-true}"
+VISION_TARGET_COLOR="${VISION_TARGET_COLOR:-red}"
 DEFAULT_VIDEO_PATH="/home/cjq/catkin_ws/pose_test_videos/body_pose_test_20260531_024131.mp4"
 HANDCONTROL_ARGS=(
     show_debug:="$SHOW_DEBUG"
@@ -38,14 +40,19 @@ else
 fi
 
 echo ""
-echo "[1/2] 启动 Gazebo + 机械臂控制器 ..."
+echo "[1/3] 启动 Gazebo + 机械臂控制器 ..."
 echo "      请等待 Gazebo 完全加载（约 10-20 秒）"
 echo ""
 
 roslaunch course_pkg demo_tb3_keyboard_control.launch gui:="$GAZEBO_GUI" &
 LAUNCH_PID=$!
+VISION_PID=""
 
 cleanup() {
+    if [ -n "$VISION_PID" ] && kill -0 "$VISION_PID" >/dev/null 2>&1; then
+        kill -INT "$VISION_PID" >/dev/null 2>&1 || true
+        wait "$VISION_PID" >/dev/null 2>&1 || true
+    fi
     if kill -0 "$LAUNCH_PID" >/dev/null 2>&1; then
         kill -INT "$LAUNCH_PID" >/dev/null 2>&1 || true
         wait "$LAUNCH_PID" >/dev/null 2>&1 || true
@@ -63,7 +70,19 @@ if ! rosnode list 2>/dev/null | grep -qx "/gazebo"; then
 fi
 
 echo ""
-echo "[2/2] 启动体感识别 + 底盘控制 ..."
+if [ "$AUTO_VISION" = "true" ]; then
+    echo "[2/3] 启动视觉自动抓取 ..."
+    echo "      看到 ${VISION_TARGET_COLOR} 目标后自动接管，抓取完成后恢复体感控制"
+    echo ""
+    roslaunch handcontrol vision_align_demo.launch target_color:="$VISION_TARGET_COLOR" &
+    VISION_PID=$!
+    sleep 2
+else
+    echo "[2/3] 跳过视觉自动抓取（AUTO_VISION=false）"
+    echo ""
+fi
+
+echo "[3/3] 启动体感识别 + 底盘控制 ..."
 echo "      输入源: $INPUT_LABEL"
 echo "      左手张开举在肩旁进入底盘模式，右手作为空中摇杆"
 echo "      双手合十或交叉在胸前会立即发布 /cmd_vel=0"

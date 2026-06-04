@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<!--
+  vision_target_detector.launch - 视觉辅助抓取第一步：颜色目标检测。
+
+  只检测目标，不控制底盘和机械臂。
+-->
+<launch>
+  <arg name="image_topic" default="/camera/rgb/image_raw"/>
+  <arg name="target_color" default="red"/>
+  <arg name="min_area_norm" default="0.0005"/>
+  <arg name="center_deadzone" default="0.12"/>
+  <arg name="debug_image_topic" default="/vision_grasp/debug_image"/>
+  <arg name="align_status_topic" default="/vision_grasp/align_status"/>
+  <arg name="debug_gripper_front_y_norm" default="-0.32"/>
+  <arg name="debug_text" default="true"/>
+  <arg name="debug_text_panel" default="true"/>
+  <arg name="debug_panel_width" default="220"/>
+  <arg name="debug_panel_position" default="bottom"/>
+  <arg name="debug_state_only" default="true"/>
+  <arg name="debug_font_scale" default="0.24"/>
+  <arg name="debug_line_step" default="18"/>
+  <arg name="debug_cjk_font_size" default="14"/>
+  <arg name="show_debug_window" default="false"/>
+  <arg name="debug_window_active_only" default="true"/>
+  <arg name="debug_window_name" default="vision_grasp_debug"/>
+  <arg name="active_topic" default="/vision_grasp/active"/>
+  <arg name="respawn" default="true"/>
+  <arg name="respawn_delay" default="1.0"/>
+  <arg name="process_rate" default="8.0"/>
+  <arg name="debug_rate" default="4.0"/>
+  <arg name="image_scale" default="0.5"/>
+
+  <node pkg="handcontrol" type="vision_target_detector.py" name="vision_target_detector" output="screen"
+        respawn="$(arg respawn)" respawn_delay="$(arg respawn_delay)">
+    <param name="image_topic" value="$(arg image_topic)"/>
+    <param name="target_color" value="$(arg target_color)"/>
+    <param name="min_area_norm" value="$(arg min_area_norm)"/>
+    <param name="center_deadzone" value="$(arg center_deadzone)"/>
+    <param name="debug_image_topic" value="$(arg debug_image_topic)"/>
+    <param name="align_status_topic" value="$(arg align_status_topic)"/>
+    <param name="debug_gripper_front_y_norm" value="$(arg debug_gripper_front_y_norm)"/>
+    <param name="debug_text" value="$(arg debug_text)"/>
+    <param name="debug_text_panel" value="$(arg debug_text_panel)"/>
+    <param name="debug_panel_width" value="$(arg debug_panel_width)"/>
+    <param name="debug_panel_position" value="$(arg debug_panel_position)"/>
+    <param name="debug_state_only" value="$(arg debug_state_only)"/>
+    <param name="debug_font_scale" value="$(arg debug_font_scale)"/>
+    <param name="debug_line_step" value="$(arg debug_line_step)"/>
+    <param name="debug_cjk_font_size" value="$(arg debug_cjk_font_size)"/>
+    <param name="show_debug_window" value="$(arg show_debug_window)"/>
+    <param name="debug_window_active_only" value="$(arg debug_window_active_only)"/>
+    <param name="debug_window_name" value="$(arg debug_window_name)"/>
+    <param name="active_topic" value="$(arg active_topic)"/>
+    <param name="process_rate" value="$(arg process_rate)"/>
+    <param name="debug_rate" value="$(arg debug_rate)"/>
+    <param name="image_scale" value="$(arg image_scale)"/>
+  </node>
+</launch>

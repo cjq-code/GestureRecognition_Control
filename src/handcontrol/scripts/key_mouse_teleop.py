@@ -20,6 +20,7 @@ import tkinter as tk
 
 import rospy
 from geometry_msgs.msg import Twist
+from std_msgs.msg import Bool
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 from handcontrol.msg import BodyPose
@@ -38,6 +39,8 @@ class KeyMouseTeleop:
 
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/cmd_vel")
         self.body_pose_topic = rospy.get_param("~body_pose_topic", "/body_pose")
+        self.auto_grasp_start_topic = rospy.get_param("~auto_grasp_start_topic", "/vision_grasp/start")
+        self.auto_grasp_active_topic = rospy.get_param("~auto_grasp_active_topic", "/vision_grasp/active")
         self.arm_topic = rospy.get_param("~arm_command_topic", "/arm_controller/command")
         self.gripper_topic = rospy.get_param(
             "~gripper_command_topic", "/gripper_controller/command"
@@ -66,8 +69,10 @@ class KeyMouseTeleop:
 
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=10)
         self.body_pose_pub = rospy.Publisher(self.body_pose_topic, BodyPose, queue_size=10)
+        self.auto_grasp_start_pub = rospy.Publisher(self.auto_grasp_start_topic, Bool, queue_size=1)
         self.arm_pub = rospy.Publisher(self.arm_topic, JointTrajectory, queue_size=2)
         self.gripper_pub = rospy.Publisher(self.gripper_topic, JointTrajectory, queue_size=2)
+        rospy.Subscriber(self.auto_grasp_active_topic, Bool, self._auto_grasp_active_cb, queue_size=1)
 
         self.pressed_keys = set()
         self.mouse_active = False
@@ -77,6 +82,8 @@ class KeyMouseTeleop:
         self.current_angular = 0.0
         self.right_palm_open_score = 0.0
         self.estop = False
+        self.auto_grasp_active = False
+        self._last_auto_grasp_active = False
         self.running = True
         self.shutdown_done = False
         self.initial_arm_retry_count = 0
@@ -189,7 +196,7 @@ class KeyMouseTeleop:
         help_text = (
             "Keyboard: W/A/S/D or arrows move while held, X/Space stop, R/U E-stop/clear\n"
             "Arm: 1 ready, 2 forward grasp    Gripper: O open, C close\n"
-            "Mouse: drag in the pad for continuous base velocity, release to stop"
+            "Auto: G start grasp, M manual/cancel    Mouse: drag pad, release to stop"
         )
         tk.Label(
             self.root,
@@ -215,6 +222,14 @@ class KeyMouseTeleop:
             side="left", padx=(0, 8)
         )
         tk.Button(button_frame, text="Gripper Close", command=self._close_gripper, width=13).pack(
+            side="left"
+        )
+        auto_frame = tk.Frame(self.root, bg="#1f2933")
+        auto_frame.pack(fill="x", padx=18, pady=(10, 0))
+        tk.Button(auto_frame, text="Auto Grasp", command=self._start_auto_grasp, width=14).pack(
+            side="left", padx=(0, 8)
+        )
+        tk.Button(auto_frame, text="Manual", command=self._cancel_auto_grasp, width=14).pack(
             side="left"
         )
 
@@ -248,6 +263,13 @@ class KeyMouseTeleop:
             self._open_gripper()
         elif key == "c":
             self._close_gripper()
+        elif key == "g":
+            self._start_auto_grasp()
+        elif key == "m":
+            self._cancel_auto_grasp()
+
+    def _auto_grasp_active_cb(self, msg):
+        self.auto_grasp_active = bool(msg.data)
 
     def _on_key_release(self, event):
         self.pressed_keys.discard(event.keysym.lower())
@@ -297,7 +319,7 @@ class KeyMouseTeleop:
         return linear, angular
 
     def _target_velocity(self):
-        if self.estop:
+        if self.estop or self.auto_grasp_active:
             return 0.0, 0.0
         if self.mouse_active:
             return self.mouse_linear, self.mouse_angular
@@ -307,6 +329,18 @@ class KeyMouseTeleop:
         if not self.running or rospy.is_shutdown():
             self._request_close()
             return
+
+        if self.auto_grasp_active:
+            if not self._last_auto_grasp_active:
+                self._publish_stop_only()
+                self._last_auto_grasp_active = True
+            self._update_status()
+            delay_ms = max(1, int(1000.0 / self.publish_rate))
+            self.root.after(delay_ms, self._publish_tick)
+            return
+        if self._last_auto_grasp_active:
+            self._publish_stop_only()
+            self._last_auto_grasp_active = False
 
         linear, angular = self._target_velocity()
         self.current_linear = linear
@@ -358,7 +392,9 @@ class KeyMouseTeleop:
             )
         )
         self.estop_var.set("E-STOP: {}".format("ON" if self.estop else "OFF"))
-        if self.estop:
+        if self.auto_grasp_active:
+            self.status_var.set("Auto grasp active. Manual control is paused.")
+        elif self.estop:
             self.status_var.set("Emergency stop is active. Press U to clear.")
         elif self.mouse_active:
             self.status_var.set("Mouse velocity pad active")
@@ -387,6 +423,9 @@ class KeyMouseTeleop:
             pass
 
     def _send_arm_pose(self, positions, label, update_status=True):
+        if self.auto_grasp_active:
+            self._set_status("Auto grasp active. Arm command ignored.")
+            return
         msg = JointTrajectory()
         msg.header.stamp = rospy.Time(0)
         msg.joint_names = list(self.arm_joint_names)
@@ -402,6 +441,9 @@ class KeyMouseTeleop:
         rospy.loginfo("[key_mouse_teleop] arm %s: %s", label, point.positions)
 
     def _send_gripper(self, position, label, update_status=True):
+        if self.auto_grasp_active:
+            self._set_status("Auto grasp active. Gripper command ignored.")
+            return
         msg = JointTrajectory()
         msg.header.stamp = rospy.Time(0)
         msg.joint_names = list(self.gripper_joint_names)
@@ -445,6 +487,18 @@ class KeyMouseTeleop:
         if not self.estop:
             self.right_palm_open_score = 0.0
             self._send_gripper(self.gripper_close_pos, "close")
+
+    def _start_auto_grasp(self):
+        self._publish_stop_only()
+        self.auto_grasp_start_pub.publish(Bool(data=True))
+        self._set_status("Auto grasp requested")
+
+    def _cancel_auto_grasp(self):
+        self.auto_grasp_start_pub.publish(Bool(data=False))
+        self.auto_grasp_active = False
+        self._last_auto_grasp_active = False
+        self._publish_stop_only()
+        self._set_status("Manual control requested")
 
     def _request_close(self):
         self.running = False

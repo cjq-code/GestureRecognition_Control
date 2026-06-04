@@ -1,0 +1,104 @@
+<?xml version="1.0"?>
+<!--
+  vision_align_demo.launch - 视觉辅助抓取入口。
+
+  启动颜色目标检测 + 自动抓取控制器。看到目标后自动接管并抓取；
+  抓取完成后释放控制权，恢复键鼠/体感手动控制。
+-->
+<launch>
+  <arg name="image_topic" default="/camera/rgb/image_raw"/>
+  <arg name="target_color" default="red"/>
+  <arg name="min_area_norm" default="0.0005"/>
+  <arg name="center_deadzone" default="0.07"/>
+  <arg name="angular_speed" default="0.16"/>
+  <arg name="min_angular_speed" default="0.025"/>
+  <arg name="angular_kp" default="0.38"/>
+  <arg name="angular_smooth" default="0.55"/>
+  <arg name="cmd_vel_topic" default="/cmd_vel"/>
+  <arg name="send_observe_pose" default="true"/>
+  <arg name="observe_pose" default="[1.05, 0.45, -0.95, 0.45]"/>
+  <arg name="ready_pose" default="[0.0, 0.75, -0.25, -0.35]"/>
+  <arg name="grasp_pose" default="[0.0, 1.55, -0.94, -0.24]"/>
+  <arg name="observe_wait" default="0.6"/>
+  <arg name="centered_hold_time" default="0.45"/>
+  <arg name="min_grasp_area_norm" default="0.0005"/>
+  <arg name="linear_speed" default="0.025"/>
+  <arg name="min_linear_speed" default="0.018"/>
+  <arg name="linear_smooth" default="0.50"/>
+  <arg name="allow_reverse" default="false"/>
+  <arg name="gripper_front_y_norm" default="-0.32"/>
+  <arg name="gripper_y_deadzone" default="0.08"/>
+  <arg name="gripper_front_close_margin" default="0.035"/>
+  <arg name="gripper_y_kp" default="0.11"/>
+  <arg name="stop_settle_time" default="0.2"/>
+  <arg name="post_grasp_approach_timeout" default="5.0"/>
+  <arg name="post_grasp_hold_time" default="0.25"/>
+  <arg name="post_arm_settle_time" default="0.45"/>
+  <arg name="post_arm_recenter_timeout" default="4.0"/>
+  <arg name="post_arm_recenter_hold_time" default="0.25"/>
+  <arg name="target_lost_grasp_hold_time" default="0.25"/>
+  <arg name="close_on_approach_timeout" default="true"/>
+  <arg name="arm_traj_time" default="0.65"/>
+  <arg name="gripper_traj_time" default="0.16"/>
+  <arg name="grasp_wait" default="0.75"/>
+  <arg name="gripper_wait" default="0.8"/>
+  <arg name="lift_wait" default="0.6"/>
+  <arg name="show_debug_window" default="false"/>
+  <arg name="process_rate" default="8.0"/>
+  <arg name="debug_rate" default="4.0"/>
+  <arg name="image_scale" default="0.5"/>
+
+  <include file="$(find handcontrol)/launch/vision_target_detector.launch">
+    <arg name="image_topic" value="$(arg image_topic)"/>
+    <arg name="target_color" value="$(arg target_color)"/>
+    <arg name="min_area_norm" value="$(arg min_area_norm)"/>
+    <arg name="center_deadzone" value="$(arg center_deadzone)"/>
+    <arg name="process_rate" value="$(arg process_rate)"/>
+    <arg name="debug_rate" value="$(arg debug_rate)"/>
+    <arg name="image_scale" value="$(arg image_scale)"/>
+    <arg name="debug_gripper_front_y_norm" value="$(arg gripper_front_y_norm)"/>
+    <arg name="show_debug_window" value="$(arg show_debug_window)"/>
+    <arg name="debug_window_active_only" value="false"/>
+  </include>
+
+  <node pkg="handcontrol" type="vision_align_controller.py" name="vision_align_controller" output="screen">
+    <param name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
+    <param name="center_deadzone" value="$(arg center_deadzone)"/>
+    <param name="angular_speed" value="$(arg angular_speed)"/>
+    <param name="min_angular_speed" value="$(arg min_angular_speed)"/>
+    <param name="angular_kp" value="$(arg angular_kp)"/>
+    <param name="angular_smooth" value="$(arg angular_smooth)"/>
+    <param name="send_observe_pose" value="$(arg send_observe_pose)"/>
+    <param name="observe_pose" value="$(arg observe_pose)"/>
+    <param name="ready_pose" value="$(arg ready_pose)"/>
+    <param name="grasp_pose" value="$(arg grasp_pose)"/>
+    <param name="observe_wait" value="$(arg observe_wait)"/>
+    <param name="auto_grasp" value="true"/>
+    <param name="auto_approach" value="true"/>
+    <param name="centered_hold_time" value="$(arg centered_hold_time)"/>
+    <param name="min_grasp_area_norm" value="$(arg min_grasp_area_norm)"/>
+    <param name="linear_speed" value="$(arg linear_speed)"/>
+    <param name="min_linear_speed" value="$(arg min_linear_speed)"/>
+    <param name="linear_smooth" value="$(arg linear_smooth)"/>
+    <param name="allow_reverse" value="$(arg allow_reverse)"/>
+    <param name="gripper_front_y_norm" value="$(arg gripper_front_y_norm)"/>
+    <param name="gripper_y_deadzone" value="$(arg gripper_y_deadzone)"/>
+    <param name="gripper_front_close_margin" value="$(arg gripper_front_close_margin)"/>
+    <param name="gripper_y_kp" value="$(arg gripper_y_kp)"/>
+    <param name="stop_settle_time" value="$(arg stop_settle_time)"/>
+    <param name="post_grasp_approach_timeout" value="$(arg post_grasp_approach_timeout)"/>
+    <param name="post_grasp_hold_time" value="$(arg post_grasp_hold_time)"/>
+    <param name="post_arm_settle_time" value="$(arg post_arm_settle_time)"/>
+    <param name="post_arm_recenter_timeout" value="$(arg post_arm_recenter_timeout)"/>
+    <param name="post_arm_recenter_hold_time" value="$(arg post_arm_recenter_hold_time)"/>
+    <param name="close_on_approach_timeout" value="$(arg close_on_approach_timeout)"/>
+    <param name="target_lost_grasp_hold_time" value="$(arg target_lost_grasp_hold_time)"/>
+    <param name="arm_traj_time" value="$(arg arm_traj_time)"/>
+    <param name="gripper_traj_time" value="$(arg gripper_traj_time)"/>
+    <param name="grasp_wait" value="$(arg grasp_wait)"/>
+    <param name="gripper_wait" value="$(arg gripper_wait)"/>
+    <param name="lift_wait" value="$(arg lift_wait)"/>
+    <param name="target_timeout" value="0.5"/>
+    <param name="publish_rate" value="20"/>
+  </node>
+</launch>

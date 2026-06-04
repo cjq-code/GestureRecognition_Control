@@ -8,6 +8,7 @@
 机械臂姿态复用键鼠控制的两个稳定姿态，避免连续映射导致穿模。
 """
 import rospy
+from std_msgs.msg import Bool
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from handcontrol.msg import BodyPose
 
@@ -24,6 +25,8 @@ class ManipTeleopBridge:
         self.use_course_mapping = rospy.get_param("~use_course_mapping", True)
         self.arm_topic = rospy.get_param("~arm_command_topic", "/arm_controller/command")
         self.grip_topic = rospy.get_param("~gripper_command_topic", "/gripper_controller/command")
+        self.semi_auto_active_topic = rospy.get_param("~semi_auto_active_topic", "/vision_grasp/active")
+        self.resume_delay_after_auto = float(rospy.get_param("~resume_delay_after_auto", 1.0))
         self.rate_hz = rospy.get_param("~publish_rate", 8.0)
         self.min_people = rospy.get_param("~min_people", 1)
         self.signal_timeout = rospy.get_param("~signal_timeout", 1.0)
@@ -41,6 +44,8 @@ class ManipTeleopBridge:
         self.gripper_traj_time = rospy.get_param("~gripper_traj_time", 0.25)
         self._last_arm_pose_name = None
         self._last_grip_name = None
+        self._semi_auto_active = False
+        self._last_auto_inactive_time = rospy.Time(0)
 
         if len(self.arm_joint_names) != 4:
             raise ValueError("~arm_joint_names must contain exactly 4 joints")
@@ -54,12 +59,21 @@ class ManipTeleopBridge:
         self.arm_pub = rospy.Publisher(self.arm_topic, JointTrajectory, queue_size=2)
         self.grip_pub = rospy.Publisher(self.grip_topic, JointTrajectory, queue_size=2)
         rospy.Subscriber("/body_pose", BodyPose, self._cb)
+        rospy.Subscriber(self.semi_auto_active_topic, Bool, self._semi_auto_active_cb, queue_size=1)
         self._pose = None
         self._last_pose_time = rospy.Time.now()
 
     def _cb(self, msg):
         self._pose = msg
         self._last_pose_time = rospy.Time.now()
+
+    def _semi_auto_active_cb(self, msg):
+        new_active = bool(msg.data)
+        if self._semi_auto_active and not new_active:
+            self._last_auto_inactive_time = rospy.Time.now()
+            self._last_arm_pose_name = None
+            self._last_grip_name = None
+        self._semi_auto_active = new_active
 
     def _send_arm_pose(self, positions, pose_name):
         jt = JointTrajectory()
@@ -114,6 +128,13 @@ class ManipTeleopBridge:
         r = rospy.Rate(self.rate_hz)
         while not rospy.is_shutdown():
             p = self._pose
+            if self._semi_auto_active:
+                r.sleep()
+                continue
+            if self._last_auto_inactive_time != rospy.Time(0):
+                if (rospy.Time.now() - self._last_auto_inactive_time).to_sec() < self.resume_delay_after_auto:
+                    r.sleep()
+                    continue
             if p is None or not self.use_course_mapping:
                 r.sleep()
                 continue

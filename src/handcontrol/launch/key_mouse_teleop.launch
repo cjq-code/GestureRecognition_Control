@@ -11,6 +11,8 @@
   <arg name="angular_speed" default="0.5"/>
   <arg name="publish_rate" default="30"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
+  <arg name="auto_grasp_start_topic" default="/vision_grasp/start"/>
+  <arg name="auto_grasp_active_topic" default="/vision_grasp/active"/>
   <arg name="arm_command_topic" default="/arm_controller/command"/>
   <arg name="gripper_command_topic" default="/gripper_controller/command"/>
   <arg name="retract_on_shutdown" default="true"/>
@@ -22,6 +24,8 @@
     <param name="angular_speed" value="$(arg angular_speed)"/>
     <param name="publish_rate" value="$(arg publish_rate)"/>
     <param name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
+    <param name="auto_grasp_start_topic" value="$(arg auto_grasp_start_topic)"/>
+    <param name="auto_grasp_active_topic" value="$(arg auto_grasp_active_topic)"/>
     <param name="arm_command_topic" value="$(arg arm_command_topic)"/>
     <param name="gripper_command_topic" value="$(arg gripper_command_topic)"/>
     <param name="retract_on_shutdown" value="$(arg retract_on_shutdown)"/>

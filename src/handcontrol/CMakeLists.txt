@@ -41,6 +41,9 @@ catkin_install_python(PROGRAMS
   scripts/key_mouse_teleop.py
   scripts/initial_arm_pose.py
   scripts/hand_action_demo.py
+  scripts/vision_target_detector.py
+  scripts/vision_align_controller.py
+  scripts/reset_gazebo_scene.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

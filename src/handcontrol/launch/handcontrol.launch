@@ -34,6 +34,11 @@
   <arg name="use_course_mapping" default="true"/>
   <arg name="cmd_vel_out_topic" default="/cmd_vel_body"/>
   <arg name="use_manip_bridge" default="true"/>
+  <arg name="semi_auto_active_topic" default="/vision_grasp/active"/>
+  <arg name="gesture_auto_grasp_enabled" default="true"/>
+  <arg name="gesture_auto_grasp_start_topic" default="/vision_grasp/start"/>
+  <arg name="gesture_auto_grasp_hold_time" default="0.6"/>
+  <arg name="gesture_auto_grasp_start_actions" default=""/>
   <!-- 平滑系数 (越小越平滑, 越大响应越快) -->
   <arg name="linear_smooth" default="0.3"/>
   <arg name="angular_smooth" default="0.3"/>
@@ -68,10 +73,16 @@
     <param name="publish_rate" value="30"/>
     <param name="use_course_mapping" value="$(arg use_course_mapping)"/>
     <param name="cmd_vel_out_topic" value="$(arg cmd_vel_out_topic)"/>
+    <param name="semi_auto_active_topic" value="$(arg semi_auto_active_topic)"/>
+    <param name="gesture_auto_grasp_enabled" value="$(arg gesture_auto_grasp_enabled)"/>
+    <param name="gesture_auto_grasp_start_topic" value="$(arg gesture_auto_grasp_start_topic)"/>
+    <param name="gesture_auto_grasp_hold_time" value="$(arg gesture_auto_grasp_hold_time)"/>
+    <param name="gesture_auto_grasp_start_actions" value="$(arg gesture_auto_grasp_start_actions)"/>
   </node>
 
   <node if="$(arg use_manip_bridge)" pkg="handcontrol" type="manip_teleop_bridge.py" name="manip_teleop_bridge" output="screen">
     <param name="use_course_mapping" value="$(arg use_course_mapping)"/>
+    <param name="semi_auto_active_topic" value="$(arg semi_auto_active_topic)"/>
   </node>
 
 </launch>

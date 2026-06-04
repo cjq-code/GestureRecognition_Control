@@ -37,9 +37,24 @@ class TeleopMapper:
         self.signal_timeout = rospy.get_param("~signal_timeout", 1.0)
         self.publish_rate = rospy.get_param("~publish_rate", 30)
         self.cmd_vel_out_topic = rospy.get_param("~cmd_vel_out_topic", "/cmd_vel_body")
+        self.semi_auto_active_topic = rospy.get_param("~semi_auto_active_topic", "/vision_grasp/active")
+        self.gesture_auto_grasp_enabled = rospy.get_param("~gesture_auto_grasp_enabled", True)
+        self.gesture_auto_grasp_start_topic = rospy.get_param(
+            "~gesture_auto_grasp_start_topic", "/vision_grasp/start"
+        )
+        self.gesture_auto_grasp_hold_time = float(rospy.get_param("~gesture_auto_grasp_hold_time", 0.6))
+        self.gesture_auto_grasp_debounce = float(rospy.get_param("~gesture_auto_grasp_debounce", 2.0))
+        self.gesture_auto_grasp_start_actions = self._string_list_param(
+            "~gesture_auto_grasp_start_actions", ["BASE_RIGHT"]
+        )
 
         self.current_body_pose = None
         self.last_pose_time = rospy.Time.now()
+        self.semi_auto_active = False
+        self._last_semi_auto_active = False
+        self._gesture_start_since = None
+        self._last_gesture_start_pub = rospy.Time(0)
+        self._last_gesture_cancel_pub = rospy.Time(0)
         self.current_linear = 0.0
         self.current_angular = 0.0
         self.target_linear = 0.0
@@ -50,17 +65,33 @@ class TeleopMapper:
 
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_out_topic, Twist, queue_size=10)
         self.armed_pub = rospy.Publisher("/course_base_armed", Bool, queue_size=1, latch=True)
+        self.auto_grasp_start_pub = rospy.Publisher(
+            self.gesture_auto_grasp_start_topic, Bool, queue_size=1
+        )
         rospy.Subscriber("/body_pose", BodyPose, self._body_pose_callback)
+        rospy.Subscriber(self.semi_auto_active_topic, Bool, self._semi_auto_active_callback, queue_size=1)
 
         rospy.loginfo("[teleop_mapper] 初始化完成")
         rospy.loginfo(f"  - use_course_mapping: {self.use_course_mapping}")
         rospy.loginfo(f"  - cmd_vel_out_topic: {self.cmd_vel_out_topic}")
+        rospy.loginfo(f"  - gesture_auto_grasp_enabled: {self.gesture_auto_grasp_enabled}")
+        rospy.loginfo(f"  - gesture_auto_grasp_start_topic: {self.gesture_auto_grasp_start_topic}")
+        rospy.loginfo(f"  - gesture_auto_grasp_start_actions: {self.gesture_auto_grasp_start_actions}")
 
         self.armed_pub.publish(Bool(data=False))
 
     def _body_pose_callback(self, msg):
         self.current_body_pose = msg
         self.last_pose_time = rospy.Time.now()
+
+    def _semi_auto_active_callback(self, msg):
+        self.semi_auto_active = bool(msg.data)
+
+    def _string_list_param(self, name, default):
+        value = rospy.get_param(name, default)
+        if isinstance(value, str):
+            return [part.strip().upper() for part in value.split(",") if part.strip()]
+        return [str(part).strip().upper() for part in value if str(part).strip()]
 
     def _angle_to_speed(self, angle):
         if abs(angle) < self.angle_deadzone:
@@ -136,6 +167,51 @@ class TeleopMapper:
         self._reset_targets(immediate=True)
         self.cmd_vel_pub.publish(Twist())
 
+    def _publish_auto_grasp_start(self, enabled, reason):
+        now = rospy.Time.now()
+        last_pub = self._last_gesture_start_pub if enabled else self._last_gesture_cancel_pub
+        if (now - last_pub).to_sec() < self.gesture_auto_grasp_debounce:
+            return
+        self.auto_grasp_start_pub.publish(Bool(data=bool(enabled)))
+        if enabled:
+            self._last_gesture_start_pub = now
+            rospy.loginfo("[teleop_mapper] gesture auto grasp start: %s", reason)
+        else:
+            self._last_gesture_cancel_pub = now
+            self._gesture_start_since = None
+            rospy.loginfo("[teleop_mapper] gesture auto grasp cancel: %s", reason)
+
+    def _handle_auto_grasp_gesture(self, pose):
+        if not self.gesture_auto_grasp_enabled or pose is None or not self.use_course_mapping:
+            self._gesture_start_since = None
+            return
+
+        mode = self._pose_mode(pose)
+        action = str(getattr(pose, "action_label", "")).upper()
+        now = rospy.Time.now()
+
+        if mode == MODE_SAFETY:
+            if self.semi_auto_active:
+                self._publish_auto_grasp_start(False, "SAFETY")
+            else:
+                self._gesture_start_since = None
+            return
+
+        start_gesture = mode == MODE_ARM and any(
+            token in action for token in self.gesture_auto_grasp_start_actions
+        )
+        if not start_gesture or self.semi_auto_active:
+            self._gesture_start_since = None
+            return
+
+        if self._gesture_start_since is None:
+            self._gesture_start_since = now
+            return
+
+        if (now - self._gesture_start_since).to_sec() >= self.gesture_auto_grasp_hold_time:
+            self._publish_auto_grasp_start(True, "ARM+" + action)
+            self._gesture_start_since = None
+
     def _smooth_to_targets(self):
         self.current_linear = self._apply_smoothing(
             self.current_linear,
@@ -164,6 +240,20 @@ class TeleopMapper:
             time_since_last = (rospy.Time.now() - self.last_pose_time).to_sec()
             if time_since_last > self.signal_timeout:
                 pose = None
+            self._handle_auto_grasp_gesture(pose)
+
+            if self.semi_auto_active:
+                if not self._last_semi_auto_active:
+                    self._publish_zero_now()
+                    self._last_semi_auto_active = True
+                if self._last_armed is not False:
+                    self.armed_pub.publish(Bool(data=False))
+                    self._last_armed = False
+                rate.sleep()
+                continue
+            if self._last_semi_auto_active:
+                self._reset_targets(immediate=True)
+                self._last_semi_auto_active = False
 
             if pose is None:
                 self._publish_zero_now()
